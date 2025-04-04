@@ -13,8 +13,15 @@ export default function AddRocket() {
   const [locationLoading, setLocationLoading] = useState(true);
   const [formVisible, setFormVisible] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
+    // Set window size safely in useEffect
+    setWindowSize({
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+    
     // Add animation delay for form appearance
     setTimeout(() => setFormVisible(true), 500);
 
@@ -34,6 +41,17 @@ export default function AddRocket() {
       console.error("Geolocation is not supported by this browser.");
       setLocationLoading(false);
     }
+    
+    // Optional: Add window resize listener
+    const handleResize = () => {
+      setWindowSize({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,7 +122,7 @@ export default function AddRocket() {
         </div>
         
         {/* Flying paper rockets in background */}
-        {[...Array(5)].map((_, i) => {
+        {windowSize.width > 0 && [...Array(5)].map((_, i) => {
           const rocketColor = getRandomColor();
           return (
             <motion.div
@@ -116,8 +134,8 @@ export default function AddRocket() {
                 rotate: Math.random() * 20 - 10
               }}
               animate={{ 
-                x: window.innerWidth + 100,
-                y: Math.random() * window.innerHeight,
+                x: windowSize.width + 100,
+                y: Math.random() * windowSize.height,
               }}
               transition={{ 
                 repeat: Infinity, 
@@ -336,13 +354,13 @@ export default function AddRocket() {
         </AnimatePresence>
         
         {/* Floating paper particles */}
-        {[...Array(20)].map((_, i) => (
+        {windowSize.width > 0 && [...Array(20)].map((_, i) => (
           <motion.div
             key={`particle-${i}`}
             className="absolute w-2 h-2 bg-white opacity-60 rounded-sm"
             initial={{ 
-              x: Math.random() * window.innerWidth,
-              y: Math.random() * window.innerHeight,
+              x: Math.random() * windowSize.width,
+              y: Math.random() * windowSize.height,
               rotate: Math.random() * 180
             }}
             animate={{ 
