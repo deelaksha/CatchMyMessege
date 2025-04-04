@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import RocketsHeader from "./header/page";
+import RocketsHeader from "../header/page";
 type Rocket = {
   id: string;
   title: string;
@@ -16,6 +16,9 @@ export default function RocketsPage() {
   const [loading, setLoading] = useState(true);
   const [selectedRocket, setSelectedRocket] = useState<Rocket | null>(null);
   const [unfolding, setUnfolding] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [maxDistance, setMaxDistance] = useState(10); // Default 10 km
+  const [unit, setUnit] = useState<"km" | "m">("km");
 
   useEffect(() => {
     fetch("/api/getRockets")
@@ -28,7 +31,44 @@ export default function RocketsPage() {
         console.error("Error fetching rockets:", error);
         setLoading(false);
       });
+
+    // Get user's geolocation
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    }
   }, []);
+
+  // Haversine formula to calculate distance between two lat/lng points
+  function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
+    const R = unit === "km" ? 6371 : 6371000; // Radius of Earth in km or meters
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in selected unit
+  }
+
+  // Filter rockets based on distance
+  const filteredRockets = rockets.filter((rocket) => {
+    if (!userLocation) return true; // Show all if no location
+    const distance = getDistance(userLocation.lat, userLocation.lng, rocket.latitude, rocket.longitude);
+    return distance <= maxDistance;
+  });
 
   const handleRocketClick = (rocket: Rocket) => {
     setSelectedRocket(rocket);
@@ -48,81 +88,133 @@ export default function RocketsPage() {
   };
 
   return (
-    <><RocketsHeader currentPage={"search"} />
-    <div className="relative w-full h-screen overflow-hidden bg-gray-900 bg-opacity-90 flex items-center">
-      {/* Stars background effect */}
-      <div className="absolute inset-0 overflow-hidden">
-        {[...Array(100)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute bg-white rounded-full opacity-70"
-            style={{
-              width: Math.random() * 3 + 1 + 'px',
-              height: Math.random() * 3 + 1 + 'px',
-              top: Math.random() * 100 + '%',
-              left: Math.random() * 100 + '%',
-              animation: `twinkle ${Math.random() * 5 + 3}s infinite`
-            }} />
-        ))}
+    
+    <div className="relative w-full h-screen overflow-hidden bg-gray-900 bg-opacity-90 flex flex-col items-center">
+    
+      <div className="fixed top-0 left-0 w-full bg-white shadow-md z-50">
+        <RocketsHeader currentPage={"search"} />
       </div>
+      {/* Distance Filter */}
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+      {/* Distance Input Section - Now at the front */}
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white">
+  {/* Distance Input Section - Top Center */}
+  <div className="absolute top-10 left-1/2 transform -translate-x-1/2 flex space-x-2 text-white z-10 bg-gray-800 bg-opacity-70 p-3 rounded-lg">
+    <div className="flex items-center">
+      <span className="mr-2">Max Distance:</span>
+      <input
+        type="number"
+        value={maxDistance}
+        onChange={(e) => setMaxDistance(Number(e.target.value))}
+        className="p-2 bg-gray-700 text-white rounded w-20"
+        placeholder="Distance"
+      />
+    </div>
+    <select 
+      value={unit} 
+      onChange={(e) => setUnit(e.target.value as "km" | "m")} 
+      className="p-2 bg-gray-700 text-white rounded"
+    >
+      <option value="km">Kilometers</option>
+      <option value="m">Meters</option>
+    </select>
+  </div>
+</div>
+
+
+      {/* Rest of your content goes here */}
+      {/* <div className="mt-6">
+        <p className="text-lg">Additional content...</p>
+      </div> */}
+    </div>
+
+      {/* Stars background effect */}
+      <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 1 }}>
+  {[...Array(100)].map((_, i) => (
+    <div 
+      key={i}
+      className="absolute bg-white rounded-full opacity-70"
+      style={{
+        width: Math.random() * 3 + 1 + 'px',
+        height: Math.random() * 3 + 1 + 'px',
+        top: Math.random() * 100 + '%',
+        left: Math.random() * 100 + '%',
+        animation: `twinkle ${Math.random() * 5 + 3}s infinite`
+      }}
+    />
+  ))}
+</div>
 
       {loading && (
-        <div className="text-white text-center w-full">
+        <div className="text-white text-center w-full z-10 mt-20">
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-            className="mx-auto w-16 h-16 border-t-4 border-blue-500 rounded-full" />
+            className="mx-auto w-16 h-16 border-t-4 border-blue-500 rounded-full"
+          />
           <p className="mt-4">Loading rockets...</p>
         </div>
       )}
+      
+      {filteredRockets.length === 0 && !loading && (
+        <p className="text-white text-center w-full z-10 mt-20">
+          No  Messege Box found within {maxDistance} {unit} of your location.
+        </p>
+      )}
 
-      {rockets.length === 0 && !loading && <p className="text-white text-center w-full">No Messege Box found in this airspace.</p>}
+      {/* User position indicator */}
+      {userLocation && (
+        <div className="absolute bottom-4 left-4 z-10 bg-gray-800 bg-opacity-70 p-2 rounded text-white text-xs">
+          📍 Your position: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)}
+        </div>
+      )}
 
       {/* Flying Messege Box */}
-      <div className="absolute top-0 bottom-0 left-0 right-0">
-        {rockets.map((rocket) => {
-          const rocketColor = getRandomColor(rocket.id);
-          const flightPath = [
-            { x: "110vw", y: Math.random() * 90 + 5 + "vh" }, // From 5% to 95% of screen height
-            { x: "-20vw", y: Math.random() * 90 + 5 + "vh" } // From 5% to 95% of screen height
-          ];
-
+      <div className="absolute top-0 bottom-0 left-0 right-0" style={{ zIndex: 5 }}>
+  {filteredRockets.map((rocket) => {
+    const rocketColor = getRandomColor(rocket.id);
+    const flightPath = [
+      { x: "110vw", y: Math.random() * 90 + 5 + "vh" },
+      { x: "-20vw", y: Math.random() * 90 + 5 + "vh" }
+    ];
+          
           return (
+
             <motion.div
-              key={rocket.id}
-              className="absolute"
-              initial={flightPath[0]}
-              animate={flightPath[1]}
-              transition={{
-                duration: 12 + Math.random() * 8,
-                ease: "linear",
-                repeat: Infinity,
-                delay: Math.random() * 5
-              }}
-              onClick={() => handleRocketClick(rocket)}
-              style={{ zIndex: 10 }}
-            >
+        key={rocket.id}
+        className="absolute"
+        initial={flightPath[0]}
+        animate={flightPath[1]}
+        transition={{ 
+          duration: 12 + Math.random() * 8,
+          ease: "linear",
+          repeat: Infinity,
+          delay: Math.random() * 5
+        }}
+        onClick={() => handleRocketClick(rocket)}
+        style={{ zIndex: 5 }}
+      >
               {/* Paper Rocket Design with folded paper effect */}
               <motion.div
                 className="relative cursor-pointer w-32 h-48 perspective"
-                whileHover={{
-                  scale: 1.1,
+                whileHover={{ 
+                  scale: 1.1, 
                   rotate: [0, -5, 5, -5, 0],
                   transition: { duration: 0.5 }
                 }}
-                animate={{
+                animate={{ 
                   rotateY: [0, 5, 0, -5, 0],
                   rotateZ: [0, 2, 0, -2, 0]
                 }}
-                transition={{
-                  duration: 3,
+                transition={{ 
+                  duration: 3, 
                   repeat: Infinity,
-                  ease: "easeInOut"
+                  ease: "easeInOut" 
                 }}
               >
                 {/* Rocket Body - with paper texture */}
-                <div className={`absolute w-24 h-36 bg-${rocketColor}-100 transform rotate-0 rounded-lg shadow-lg`}
-                  style={{
+                <div className={`absolute w-24 h-36 bg-${rocketColor}-100 transform rotate-0 rounded-lg shadow-lg`} 
+                  style={{ 
                     backgroundImage: 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.1) 75%, transparent 75%, transparent)',
                     backgroundSize: '4px 4px'
                   }}>
@@ -131,20 +223,20 @@ export default function RocketsPage() {
                   <div className="absolute right-1/4 top-0 bottom-0 w-px bg-gray-300 opacity-50"></div>
                   <div className="absolute top-1/3 left-0 right-0 h-px bg-gray-300 opacity-50"></div>
                 </div>
-
+                
                 {/* Nose Cone - with folded paper effect */}
                 <div className={`absolute top-0 left-0 right-0 mx-auto w-0 h-0 border-l-12 border-r-12 border-t-16 border-l-transparent border-r-transparent border-t-${rocketColor}-200`}></div>
-
+                
                 {/* Left Fin - with paper fold */}
                 <div className={`absolute bottom-1/4 -left-2 w-6 h-12 bg-${rocketColor}-300 skew-y-12 origin-right`}>
                   <div className="absolute right-0 top-0 bottom-0 w-px bg-gray-400 opacity-70"></div>
                 </div>
-
+                
                 {/* Right Fin - with paper fold */}
                 <div className={`absolute bottom-1/4 -right-2 w-6 h-12 bg-${rocketColor}-300 -skew-y-12 origin-left`}>
                   <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-400 opacity-70"></div>
                 </div>
-
+                
                 {/* Exhaust - folded paper effect */}
                 <div className="absolute -bottom-6 left-0 right-0 mx-auto">
                   <div className={`w-8 h-10 bg-orange-100 transform rotate-180 origin-top`}
@@ -152,27 +244,28 @@ export default function RocketsPage() {
                     <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-400 opacity-50"></div>
                   </div>
                 </div>
-
+                
                 {/* Small exhaust smoke particles */}
                 {[...Array(5)].map((_, i) => (
                   <motion.div
                     key={i}
                     className="absolute w-3 h-3 bg-gray-200 rounded-full opacity-60"
                     initial={{ y: 0, x: 0, scale: 0 }}
-                    animate={{
-                      y: [0, 30 + i * 10],
+                    animate={{ 
+                      y: [0, 30 + i * 10], 
                       x: [0, (i % 2 === 0 ? 1 : -1) * 15],
                       opacity: [0.7, 0],
                       scale: [0, 1]
                     }}
-                    transition={{
-                      duration: 2,
+                    transition={{ 
+                      duration: 2, 
                       repeat: Infinity,
                       delay: i * 0.2
                     }}
-                    style={{ bottom: -10, left: '50%', marginLeft: '-5px' }} />
+                    style={{ bottom: -10, left: '50%', marginLeft: '-5px' }}
+                  />
                 ))}
-
+                
                 {/* Window - folded paper cutout */}
                 <div className="absolute top-1/3 left-0 right-0 mx-auto w-8 h-8 rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center">
                   <div className="w-6 h-6 rounded-full bg-blue-100"></div>
@@ -199,34 +292,36 @@ export default function RocketsPage() {
               <motion.div
                 className="relative w-80 h-64 bg-white rounded overflow-hidden shadow-2xl"
                 initial={{ scale: 0.1, rotateX: 180, originY: 0 }}
-                animate={{
-                  scale: unfolding ? [0.1, 0.3, 0.4, 0.6, 0.8, 1] : 1,
+                animate={{ 
+                  scale: unfolding ? [0.1, 0.3, 0.4, 0.6, 0.8, 1] : 1, 
                   rotateX: unfolding ? [180, 150, 120, 90, 45, 0] : 0
                 }}
                 exit={{ scale: 0.1, rotateX: 180, originY: 0 }}
                 transition={{ duration: unfolding ? 1.5 : 0.5 }}
               >
                 {/* Folding lines that animate during open */}
-                <motion.div
-                  className="absolute w-full h-px bg-gray-300 top-1/2 left-0 z-10"
+                <motion.div 
+                  className="absolute w-full h-px bg-gray-300 top-1/2 left-0 z-10" 
                   initial={{ scaleX: 1 }}
                   animate={{ scaleX: unfolding ? [1, 0] : 0 }}
-                  transition={{ duration: 0.8 }} />
-
-                <motion.div
-                  className="absolute w-px h-full bg-gray-300 left-1/2 top-0 z-10"
+                  transition={{ duration: 0.8 }}
+                />
+                
+                <motion.div 
+                  className="absolute w-px h-full bg-gray-300 left-1/2 top-0 z-10" 
                   initial={{ scaleY: 1 }}
                   animate={{ scaleY: unfolding ? [1, 0] : 0 }}
-                  transition={{ duration: 0.8, delay: 0.4 }} />
+                  transition={{ duration: 0.8, delay: 0.4 }}
+                />
 
                 {/* Paper texture background */}
-                <div className="absolute inset-0 opacity-20" style={{
+                <div className="absolute inset-0 opacity-20" style={{ 
                   backgroundImage: 'linear-gradient(45deg, rgba(0,0,0,0.05) 25%, transparent 25%, transparent 50%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.05) 75%, transparent 75%, transparent)',
                   backgroundSize: '4px 4px'
                 }}></div>
 
                 {/* Content container */}
-                <motion.div
+                <motion.div 
                   className="w-full h-full p-6 flex flex-col items-center justify-center"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -236,19 +331,31 @@ export default function RocketsPage() {
                   <h2 className="font-bold text-center text-xl mb-4 text-gray-800 border-b-2 border-gray-200 pb-2" style={{ fontFamily: 'cursive' }}>
                     {selectedRocket.title}
                   </h2>
-
+                  
                   <div className="bg-yellow-50 p-3 rounded border border-yellow-100 shadow-sm w-full mb-4">
                     <p className="text-center text-gray-700" style={{ fontFamily: 'cursive' }}>
                       {selectedRocket.message}
                     </p>
                   </div>
-
+                  
                   {/* <p className="text-center text-sm text-gray-500 mt-2 flex items-center">
-                    <span className="mr-1">📍</span>
+                    <span className="mr-1">📍</span> 
                     <span className="text-xs">
                       {selectedRocket.latitude.toFixed(4)}, {selectedRocket.longitude.toFixed(4)}
                     </span>
                   </p> */}
+
+                  {/* Distance from user */}
+                  {userLocation && (
+                    <p className="text-center text-sm text-blue-500 mt-2">
+                      Distance: {getDistance(
+                        userLocation.lat, 
+                        userLocation.lng, 
+                        selectedRocket.latitude, 
+                        selectedRocket.longitude
+                      ).toFixed(2)} {unit}
+                    </p>
+                  )}
                 </motion.div>
               </motion.div>
 
@@ -260,7 +367,7 @@ export default function RocketsPage() {
               >
                 ✈️
               </motion.div>
-
+              
               {/* Close button */}
               <motion.button
                 onClick={closeRocket}
@@ -274,6 +381,15 @@ export default function RocketsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div></>
+
+      {/* Add styles for the star twinkle animation */}
+      <style jsx>{`
+        @keyframes twinkle {
+          0% { opacity: 0.3; }
+          50% { opacity: 1; }
+          100% { opacity: 0.3; }
+        }
+      `}</style>
+    </div>
   );
 }
