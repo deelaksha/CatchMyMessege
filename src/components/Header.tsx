@@ -74,6 +74,10 @@ export default function Header() {
                 {messageCount}
               </span>
             </Link>
+            <Link href="/about" className="flex items-center hover:text-blue-200 transition-colors">
+              <FaUser className="mr-1" />
+              About Us
+            </Link>
             <Link href="/contact" className="flex items-center hover:text-blue-200 transition-colors">
               <FaEnvelope className="mr-1" />
               Contact Us
@@ -159,6 +163,14 @@ export default function Header() {
                 <span className="ml-2 bg-red-500 text-white text-xs rounded-full px-2 py-1">
                   {messageCount}
                 </span>
+              </Link>
+              <Link
+                href="/about"
+                className="flex items-center hover:text-blue-200 transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                <FaUser className="mr-2" />
+                About Us
               </Link>
               <Link
                 href="/contact"
