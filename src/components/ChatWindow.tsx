@@ -30,10 +30,13 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const [lastSeen, setLastSeen] = useState<Date | null>(null);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const onlineStatusRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -51,8 +54,16 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
             participants: [user.email, recipientEmail],
             createdAt: serverTimestamp(),
             typing: {
-              [user.email]: false,
-              [recipientEmail]: false
+              [user.email as string]: false,
+              [recipientEmail as string]: false
+            },
+            onlineStatus: {
+              [user.email as string]: true,
+              [recipientEmail as string]: false
+            },
+            lastSeen: {
+              [user.email as string]: serverTimestamp(),
+              [recipientEmail as string]: null
             }
           });
         }
@@ -75,15 +86,56 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
           if (doc.exists()) {
             const data = doc.data();
             const typingStatus = data.typing || {};
+            const onlineStatus = data.onlineStatus || {};
+            const lastSeenData = data.lastSeen || {};
+            
             setOtherUserTyping(typingStatus[recipientEmail] || false);
+            setIsOnline(onlineStatus[recipientEmail] || false);
+            setLastSeen(lastSeenData[recipientEmail]?.toDate() || null);
           }
         });
+
+        // Update online status
+        const updateOnlineStatus = async () => {
+          if (chatDoc.exists()) {
+            await updateDoc(chatRef, {
+              'onlineStatus': {
+                ...chatDoc.data().onlineStatus,
+                [user.email as string]: true
+              },
+              'lastSeen': {
+                ...chatDoc.data().lastSeen,
+                [user.email as string]: serverTimestamp()
+              }
+            });
+          }
+        };
+
+        // Set up online status interval
+        updateOnlineStatus();
+        onlineStatusRef.current = setInterval(updateOnlineStatus, 30000);
 
         return () => {
           messagesUnsubscribe();
           typingUnsubscribe();
           if (typingTimeoutRef.current) {
             clearTimeout(typingTimeoutRef.current);
+          }
+          if (onlineStatusRef.current) {
+            clearInterval(onlineStatusRef.current);
+          }
+          // Set offline status when component unmounts
+          if (chatDoc.exists()) {
+            updateDoc(chatRef, {
+              'onlineStatus': {
+                ...chatDoc.data().onlineStatus,
+                [user.email as string]: false
+              },
+              'lastSeen': {
+                ...chatDoc.data().lastSeen,
+                [user.email as string]: serverTimestamp()
+              }
+            });
           }
         };
       } catch (error) {
@@ -116,7 +168,8 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
         await updateDoc(chatRef, {
           typing: {
             ...currentTyping,
-            [user.email]: isTyping
+            [user.email as string]: isTyping,
+            ...(recipientEmail ? { [recipientEmail]: false } : {})
           }
         });
       }
@@ -198,14 +251,21 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-            <span className="text-blue-600 font-semibold">
-              {recipientName.charAt(0)}
-            </span>
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+              <span className="text-blue-600 font-semibold">
+                {recipientName.charAt(0)}
+              </span>
+            </div>
+            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+              isOnline ? 'bg-green-500' : 'bg-gray-400'
+            }`} />
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">{recipientName}</h3>
-            <p className="text-sm text-gray-500">{recipientEmail}</p>
+            <p className="text-sm text-gray-500">
+              {isOnline ? 'Online' : lastSeen ? `Last seen ${formatLastSeen(lastSeen)}` : 'Offline'}
+            </p>
           </div>
         </div>
         <button
@@ -391,4 +451,22 @@ export default function ChatWindow({ recipientEmail, recipientName, onClose }: C
       </form>
     </motion.div>
   );
+}
+
+function formatLastSeen(date: Date): string {
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) {
+    return 'just now';
+  } else if (diffInSeconds < 3600) {
+    const minutes = Math.floor(diffInSeconds / 60);
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  } else if (diffInSeconds < 86400) {
+    const hours = Math.floor(diffInSeconds / 3600);
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else {
+    const days = Math.floor(diffInSeconds / 86400);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  }
 } 
